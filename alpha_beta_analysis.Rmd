@@ -1,0 +1,407 @@
+---
+title: "Alpha diversity"
+author: "Amina Hanaan"
+date: "2026-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading libraries 
+
+```{r}
+library(phyloseq)
+library(ggpubr)
+library(tidyverse)
+library(readxl)
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("microbiome")
+
+library(microbiome)
+library(vegan)
+# if (!requireNamespace("devtools", quietly = TRUE))
+#   install.packages("devtools")
+
+# devtools::install_github("pmartinezarbizu/pairwiseAdonis/pairwiseAdonis")
+
+library(pairwiseAdonis)
+library(dplyr)
+library(broom)
+library(readr)
+library(viridis)
+
+```
+
+#Loading data and metadata
+
+
+
+```{r pressure, echo=FALSE}
+set.seed(124)
+prism_cb_safe <- c(
+  # "#000000", 
+  "#FB0165", 
+  "#3297A7", 
+  "#AB66FD", 
+  "#41057E", 
+  "#0072B2", 
+  "#D55E00", 
+  "#CC79A7"  
+)
+
+path = "."
+setwd(path)
+set.seed(124)
+
+#====================================
+#Loading data and metadata
+#====================================
+
+raw_data <- read.csv("Abundance_table.csv") %>%
+  mutate(Kingdom = str_replace(Kingdom,                  
+                               "Unclassified", "Others"))
+
+#Metadata
+metadata <- data.frame(
+  Sample_ID = c("L1.1","L1.2","L1.3","L1.4","L1.5","L1.6","L1.7","L1.8","L1.9",
+                "L3.10","L3.11","L3.12","L3.13","L3.14","L3.15","L3.16","L3.17","L3.18",
+                "L5.19","L5.20","L5.21","L5.22","L5.23","L5.24","L5.25","L5.26","L5.27"),
+  Location = c(rep("Location 1", 9), rep("Location 3", 9), rep("Location 5", 9)),
+  Treatment = c(rep("CL", 3), rep("DD", 3), rep("MC", 3),
+                rep("CL", 3), rep("DD", 3), rep("MC", 3),
+                rep("CL", 3), rep("DD", 3), rep("MC", 3))
+)
+
+#====================================
+#Phyloseq object
+#====================================
+otu_mat <- as.data.frame(raw_data[, 9:ncol(raw_data)])
+rownames(otu_mat) <- raw_data[[1]] 
+OTU <- otu_table(as.matrix(otu_mat), taxa_are_rows = TRUE)
+
+tax_mat <- as.data.frame(raw_data[, 1:8])
+rownames(tax_mat) <- tax_mat[[1]]
+tax_mat_final <- as.matrix(tax_mat[, -1])
+TAX <- tax_table(tax_mat_final)
+
+metadata_df <- as.data.frame(metadata)
+rownames(metadata_df) <- metadata_df$Sample_ID
+META <- sample_data(metadata_df)
+
+
+print(colnames(OTU))
+print(rownames(META))
+setdiff(colnames(OTU), rownames(META))
+
+ps <- phyloseq(OTU, TAX, META)
+saveRDS(ps, "ps_raw.rds")
+
+
+```
+
+# Filtering & transformation
+```{r}
+#Prevalence filtering
+core_data <- core(x = ps,
+                  detection = 0.01,
+                  prevalence = 10/100)
+core_data
+
+
+```
+
+# ALPHA DIVERSITY
+Location-Treatment wise shannon diversity and observed richness is plotted
+
+```{r}
+#Alpha diversity
+rich <- estimate_richness(ps, measures = c("Observed","Shannon"))
+rich
+write.csv(rich, "alpha_div/alpha_div.csv")
+
+comparisons <- list(
+  c("CL","DD"),
+  c("CL","MC"),
+  c("DD","MC")
+)
+
+p_sha <- plot_richness(ps, x = "Treatment", measures = "Shannon") +
+  geom_boxplot(aes(fill = Treatment), outlier.shape = NA) + 
+  facet_wrap(~Location) + 
+  scale_x_discrete(labels = NULL) +
+  theme_minimal()  +
+  labs(y = "Shannon entropy", x = NULL) +
+  theme(legend.position = "bottom",
+    axis.text.x = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        ) + theme(
+          strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    
+    panel.spacing = unit(0, "lines"),
+    
+    panel.border = element_rect(color = "black", fill = NA, linetype = "dotted"),
+    axis.text.x = element_text(angle = 45, hjust = 1, 
+                                   size = 12),
+        axis.text = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        ) +
+  scale_fill_manual(values = prism_cb_safe)
+
+
+p_sha<- p_sha + stat_compare_means(method = "wilcox.test", 
+                       comparisons = comparisons,
+                       label = "p.format")
+
+ggsave(p_sha, file = "alpha_div/shannon_entropy.png",bg = "white", width = 8, height = 6, dpi = 300)
+
+
+print(p_obs)
+print(p_sha)
+
+```
+# Wilcox Test
+
+```{r}
+rich_df<- as.data.frame(rich)
+rich_df$Location <- sample_data(ps)$Location
+rich_df$Treatment <- sample_data(ps)$Treatment
+```
+## Location wise wilcox test
+```{r}
+
+kr_loc_obs<- kruskal.test(Observed ~ Location, data = rich_df)
+kr_loc_shn<- kruskal.test(Shannon ~ Location, data = rich_df)
+
+wilcox_loc_obs <- pairwise.wilcox.test(rich_df$Observed, rich_df$Location, p.adjust.method = "fdr")
+print(wilcox_loc_obs)
+
+wilcox_loc_shannon <- pairwise.wilcox.test(rich_df$Shannon, rich_df$Location, p.adjust.method = "fdr")
+print(wilcox_loc_shannon)
+```
+## treatment wise wilcox test
+```{r}
+kr_treat_obs <- kruskal.test(Observed ~ Treatment, data = rich_df)
+kr_treat_shn <- kruskal.test(Shannon ~ Treatment, data = rich_df)
+
+wilcox_observed <- pairwise.wilcox.test(
+  rich_df$Observed,
+  rich_df$Treatment,
+  p.adjust.method = "fdr"
+)
+
+wilcox_shannon <- pairwise.wilcox.test(
+  rich_df$Shannon,
+  rich_df$Treatment,
+  p.adjust.method = "fdr")
+  
+```
+## Saving files
+```{r}
+#Kruskallis
+test_results <- list()
+
+test_df <- tibble(
+  Type = c("Location","Location","Treatment","Treatment"),
+  Test = c("Observed","Shannon","Observed","Shannon"),
+  Statistic = c(kr_loc_obs$statistic,kr_loc_shn$statistic,
+                kr_treat_obs$statistic,kr_treat_shn$statistic),
+  krus_df = c(kr_loc_obs$parameter,kr_loc_shn$parameter,
+              kr_treat_obs$parameter,kr_treat_shn$parameter),
+  krus_p_value = c(kr_loc_obs$p.value,kr_loc_shn$p.value,
+                   kr_treat_obs$p.value,kr_treat_shn$p.value)
+)
+
+write.csv(test_df, "alpha_div/kruskal.csv", row.names = FALSE)
+
+# Wilcox
+df_loc_obs <- tidy(wilcox_loc_obs) %>%
+  mutate(Metric = "Observed", Type = "Location")
+
+df_loc_shn <- tidy(wilcox_loc_shannon) %>%
+  mutate(Metric = "Shannon", Type = "Location")
+
+df_treat_obs <- tidy(wilcox_observed) %>%
+  mutate(Metric = "Observed", Type = "Treatment")
+
+df_treat_shn <- tidy(wilcox_shannon) %>%
+  mutate(Metric = "Shannon", Type = "Treatment")
+
+df_wilcox <- bind_rows(df_loc_obs,
+                       df_loc_shn,
+                       df_treat_obs,
+                       df_treat_shn)
+
+write_csv(df_wilcox,"alpha_div/wilcox_results.csv")
+
+```
+
+## Data Transformation
+```{r}
+dir.create("beta_div")
+
+if(taxa_are_rows(core_data)){
+  otu_mat <- t(otu_mat)
+}
+otu_nozero <- zCompositions::cmultRepl(otu_mat)
+otu_clr <- compositions::clr(otu_nozero)
+
+OTU_CLR <- otu_table(t(otu_clr), taxa_are_rows = TRUE)
+
+ps_clr <- phyloseq(OTU_CLR,
+                   tax_table(core_data),
+                   sample_data(core_data))
+
+```
+##CLR transformation
+```{r}
+dist_mat <- phyloseq::distance(ps_clr, method = "euclidean")
+
+
+ord <- ordinate(ps_clr,
+                method = "PCoA",
+                distance = "euclidean")
+```
+
+#PERMANOVA
+
+```{r}
+metadata_df <- as(sample_data(ps_clr), "data.frame")
+
+adonis_result_overall <- adonis2(dist_mat ~ Location * Treatment,
+                                 data = metadata_df,
+                                 permutations = 999,
+                                 by = "margin")
+
+print(adonis_result_overall)
+```
+
+## Location-wise
+```{r}
+locations <- unique(metadata_df$Location)
+adonis_result <- list()
+
+for (loc in locations){
+
+  phy_loc <- subset_samples(ps_clr, Location == loc)
+  phy_loc <- prune_taxa(taxa_sums(phy_loc) > 0, phy_loc)
+
+  dist_loc <- phyloseq::distance(phy_loc, method = "euclidean")
+  meta_loc <- as(sample_data(phy_loc), "data.frame")
+
+  ad <- adonis2(dist_loc ~ Treatment,
+                data = meta_loc,
+                permutations = 999)
+
+  df <- as.data.frame(ad)
+  df$Term <- rownames(df)
+  df$Location <- loc
+
+  adonis_result[[loc]] <- df
+  print(adonis_result[[loc]])
+}
+
+
+```
+## Treatment-wise pairwise adonis test
+
+```{r}
+metadata_df$Treatment <- as.factor(metadata_df$Treatment)
+
+treatments <- unique(metadata_df$Treatment)
+
+pairs <- combn(treatments, 2, simplify = FALSE)
+
+pairwise_results <- list()
+
+for(p in pairs){
+
+  meta_sub <- metadata_df[metadata_df$Treatment %in% p, ]
+
+  dist_sub <- as.dist(as.matrix(dist_mat)[rownames(meta_sub),
+                                          rownames(meta_sub)])
+
+  ad <- adonis2(dist_sub ~ Treatment, data = meta_sub)
+
+  df <- as.data.frame(ad)
+  df$Term <- rownames(df)
+  df$Comparison <- paste(p, collapse = "_vs_")
+
+  pairwise_results[[paste(p, collapse = "_vs_")]] <- df
+}
+
+pairwise_adonis_df <- do.call(rbind, pairwise_results)
+
+write.csv(pairwise_adonis_df,
+          "beta_div/pairwise_treatment_adonis.csv",
+          row.names = FALSE)
+print(pairwise_adonis_df)
+```
+#BETA DIVERSITY - Aitchison 
+```{r}
+metadata_df$Group <- paste(metadata_df$Location,
+                           metadata_df$Treatment,
+                           sep = "_")
+
+disp <- betadisper(dist_mat, metadata_df$Group)
+
+disp_df <- data.frame(
+  SampleID = names(disp$distances),
+  Distance = disp$distances
+)
+disp_df <- cbind(metadata_df,
+                 Distance = disp$distances)
+
+write.csv(disp_df, "beta_div/aitchison_dispersion.csv")
+
+bray_box <- ggplot(disp_df,
+                   aes(x = Treatment,
+                       y = Distance,
+                       fill = Treatment)) +
+  geom_boxplot(aes(fill = Treatment),
+               outlier.shape = NA) + 
+  facet_wrap(~Location) + 
+  scale_x_discrete(labels = NULL) +
+  theme_bw() + stat_compare_means(method = "wilcox.test", 
+                       comparisons = comparisons,
+                       label = "p.format") +
+  labs(
+    y = "Aitchison distance",
+    x = NULL
+  ) +
+    theme(legend.position = "bottom",
+    axis.text.x = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        ) + theme(
+          strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    panel.spacing = unit(0, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, linetype = "dotted"),
+    axis.text.x = element_text(angle = 45, hjust = 1, 
+                                   size = 12),
+        axis.text = element_text(size = 12),
+        axis.title.y = element_text(size = 12)
+        ) +
+  scale_fill_manual(values = prism_cb_safe)
+
+bray_box + stat_compare_means(method = "wilcox.test", 
+                       comparisons = comparisons,
+                       label = "p.format")
+
+  
+ggsave(bray_box, file = "beta_div2/aitchison.png",bg = "white", width = 8, height = 6, dpi = 300)
+bray_box
+
+```
+##Dispersion test
+
+```{r}
+anova(disp)
+```
+
