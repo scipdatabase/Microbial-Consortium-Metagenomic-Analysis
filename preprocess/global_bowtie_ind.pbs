@@ -1,0 +1,51 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q mediumq
+#PBS -l select=1:ncpus=20:mem=64gb
+#PBS -l walltime=12:00:00
+#PBS -P bric
+#PBS -N bowtie2_index_global
+#PBS -o logs/index.%J.out
+#PBS -e logs/index.%J.err
+
+cd $PBS_O_WORKDIR
+mkdir -p logs
+
+module load anaconda3/2022.05
+source activate bowtie_env
+
+BASE_DIR="."
+
+CONTIGS="${BASE_DIR}/megahit_coassembly_2/final_500bp.fa"
+
+INDEX_DIR="${BASE_DIR}/bowtie2_index"
+INDEX="${INDEX_DIR}/coassembly_index"
+
+mkdir -p "$INDEX_DIR"
+
+echo "Indexing GLOBAL assembly..."
+
+# --- VERIFY INPUT ---
+if [ ! -f "$CONTIGS" ]; then
+    echo "ERROR: Contigs not found: $CONTIGS"
+    exit 1
+fi
+
+# --- SKIP IF EXISTS ---
+if ls ${INDEX}*.bt2 1> /dev/null 2>&1; then
+    echo "Index already exists — skipping"
+    exit 0
+fi
+
+# --- BUILD INDEX ---
+bowtie2-build \
+    --threads 20 \
+    "$CONTIGS" \
+    "$INDEX"
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Bowtie2 index build failed"
+    exit 1
+fi
+
+echo "Finished GLOBAL Bowtie2 indexing"
