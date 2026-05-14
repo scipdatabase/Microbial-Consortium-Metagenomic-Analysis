@@ -1,0 +1,41 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q mediumq
+#PBS -l select=1:ncpus=20:mem=120gb
+#PBS -l walltime=72:00:00
+#PBS -P bric
+#PBS -N prokka_global
+#PBS -o logs/prokka_global.out
+#PBS -e logs/prokka_global.err
+
+cd $PBS_O_WORKDIR
+mkdir -p logs
+
+module load prokka/1.14.6
+
+FASTA="./megahit_coassembly_2/final.contigs.fa"
+OUT_DIR="./prokka_global"
+
+# =========================
+# STEP 1: PROKKA (FIXED)
+# =========================
+
+echo "Starting Prokka..."
+
+rm -rf "$PROKKA_OUT"   # safest for global assembly
+mkdir -p "$PROKKA_OUT"
+
+prokka \
+    --outdir "$PROKKA_OUT" \
+    --prefix global \
+    --cpus 20 \
+    --metagenome \
+    --force \
+    "$FASTA"
+
+# strict check
+if [ ! -f "${PROKKA_OUT}/global.faa" ]; then
+    echo "ERROR: Prokka failed properly"
+    exit 1
+fi
+

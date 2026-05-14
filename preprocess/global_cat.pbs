@@ -1,0 +1,77 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -q mediumq
+#PBS -l select=1:ncpus=20:mem=120gb
+#PBS -l walltime=72:00:00
+#PBS -P bric
+#PBS -N CAT_global
+#PBS -o logs/CAT_global.out
+#PBS -e logs/CAT_global.err
+
+cd $PBS_O_WORKDIR
+mkdir -p logs
+
+# Activate conda
+module load anaconda3/2022.05
+source activate CAT_env
+
+# Verify CAT is found
+which CAT_pack
+CAT_pack --version
+
+# =========================
+# PATHS
+# =========================
+CONTIGS="/ibdc-scratch2/home/nipgr001_skmuthappa/Amina/global/global.fna"
+PROTEINS="/ibdc-scratch2/home/nipgr001_skmuthappa/Amina/global/global.faa"
+DB="/ibdc-scratch2/home/nipgr001_skmuthappa/Amina/cat_tool/20241212_CAT_nr_website/db"
+TAX="/ibdc-scratch2/home/nipgr001_skmuthappa/Amina/cat_tool/20241212_CAT_nr_website/tax"
+OUT_DIR="/ibdc-scratch2/home/nipgr001_skmuthappa/Amina/CAT_output"
+
+mkdir -p "$OUT_DIR"
+
+# =========================
+# STEP 1: CAT CONTIGS
+# =========================
+echo "Starting CAT contigs..."
+
+CAT_pack contigs \
+    -c "$CONTIGS" \
+    -d "$DB" \
+    -t "$TAX" \
+    -o "${OUT_DIR}/global" \
+    -n 20 \
+    --block_size 4 \
+    -f 0.5
+
+
+if [ ! -f "${OUT_DIR}/global.contig2classification.txt" ]; then
+    echo "ERROR: CAT contigs failed"
+    exit 1
+fi
+
+# =========================
+# STEP 2: ADD NAMES
+# =========================
+echo "Adding taxonomy names..."
+CAT_pack add_names \
+    -i "${OUT_DIR}/global.contig2classification.txt" \
+    -o "${OUT_DIR}/global.named.txt" \
+    -t "$TAX" \
+    --only_official
+
+if [ ! -f "${OUT_DIR}/global.named.txt" ]; then
+    echo "ERROR: add_names failed"
+    exit 1
+fi
+
+# =========================
+# STEP 3: SUMMARISE
+# =========================
+echo "Summarising..."
+CAT_pack summarise \
+    -c "$CONTIGS" \
+    -i "${OUT_DIR}/global.named.txt" \
+    -o "${OUT_DIR}/global.summary.txt"
+
+echo "CAT completed successfully"
