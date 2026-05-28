@@ -322,19 +322,5 @@ Co-occurrence networks were constructed per treatment using `network_treatment.R
 
 ---
 
-## Sample Design
-
-| Sample | Location | Treatment |
-|---|---|---|
-| L1-1, L1-2, L1-3 | Location 1 | Control (CL) |
-| L1-4, L1-5, L1-6 | Location 1 | Combined Stress (CS) |
-| L1-7, L1-8, L1-9 | Location 1 | CS + Consortium (MC) |
-| L3-10 … L3-12 | Location 3 | Control (CL) |
-| L3-13 … L3-15 | Location 3 | Combined Stress (CS) |
-| L3-16 … L3-18 | Location 3 | CS + Consortium (MC) |
-| L5-19 … L5-21 | Location 5 | Control (CL) |
-| L5-22 … L5-24 | Location 5 | Combined Stress (CS) |
-| L5-25 … L5-27 | Location 5 | CS + Consortium (MC) |
-
 ---
 
