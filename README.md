@@ -63,8 +63,9 @@ Raw sequencing data are deposited at NCBI under BioProject **[PRJNA1464083](http
 │   ├── 06_global_bowtie_map.pbs     
 │   ├── 07_global_cat.pbs            
 │   ├── 08_global_prokka.pbs         
-│   ├── 09_global_eggnog.pbs         
-│   └── 10_global_dbcan.pbs          
+│   ├── 09_global_eggnog.pbs
+│   ├── 10_global_dbcan.pbs         
+│   └── 11_featurecounts.sh          
 │
 ├── analysis/
 │   ├── alpha_beta_analysis.Rmd      
